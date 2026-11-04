@@ -1,0 +1,90 @@
+const {_electron:electron}=require('playwright');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+(async()=>{
+  const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
+  fs.mkdirSync('test-results',{recursive:true});const profile=fs.mkdtempSync(path.resolve('test-results/profile-'));
+  const profileArg='--user-data-dir='+profile;
+  const app=await electron.launch(process.env.AUREA_EXECUTABLE ? {executablePath:process.env.AUREA_EXECUTABLE,args:[profileArg],env} : {args:['.',profileArg],env});
+  try{
+    const page=await app.firstWindow();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    await page.evaluate(async()=>{await navigator.requestMIDIAccess({sysex:false});});
+    await page.addInitScript(()=>{
+      const create=AudioContext.prototype.createAnalyser;
+      AudioContext.prototype.createAnalyser=function(){const node=create.call(this);window.testAnalyser=node;return node;};
+      const input={id:'test-piano',name:'Piano de prueba',state:'connected',onmidimessage:null};
+      window.testMidi=input;window.testOutput=[];
+      Object.defineProperty(navigator,'requestMIDIAccess',{value:async()=>({inputs:new Map([[input.id,input]]),outputs:new Map([['test-out',{id:'test-out',name:'Salida de prueba',state:'connected',send:message=>window.testOutput.push(message)}]])})});
+    });
+    await page.reload();
+    assert.equal(await page.locator('#keyboard .key').count(),88);
+    assert.equal(await page.locator('#keyboard .key.black').count(),36);
+    await page.locator('#power').click();
+    await page.locator('#status').filter({hasText:'Piano listo'}).waitFor({timeout:60000});
+    await page.locator('#power').focus();await page.keyboard.down('a');
+    await page.locator('[data-note="60"].active').waitFor();
+    await page.keyboard.up('a');assert.equal(await page.locator('.key.active').count(),0);
+    await page.locator('[data-tab="ajustes"]').click();
+    await page.selectOption('#midi-in','test-piano');await page.selectOption('#midi-out','test-out');
+    assert.equal(await page.locator('#connection-status').getAttribute('class'),'connected');
+    await page.evaluate(()=>window.testMidi.onmidimessage({data:[144,60,127]}));
+    await page.locator('[data-note="60"].active').waitFor();
+    assert.match(await page.locator('#note-label').textContent(),/85/);
+    await page.waitForTimeout(120);
+    const amplitude=await page.evaluate(()=>{const values=new Float32Array(window.testAnalyser.fftSize);window.testAnalyser.getFloatTimeDomainData(values);return Math.max(...values.map(Math.abs));});
+    assert(amplitude>0.0001,`Audio sin señal: ${amplitude}`);
+    await page.evaluate(()=>window.testMidi.onmidimessage({data:[144,60,0]}));
+    assert.equal(await page.locator('.key.active').count(),0);
+    await page.locator('[data-tab="sonido"]').click();
+    await page.selectOption('#transpose','12');
+    await page.evaluate(()=>window.testMidi.onmidimessage({data:[145,60,90]}));
+    await page.locator('[data-note="72"].active').waitFor();
+    await page.selectOption('#transpose','0');assert.equal(await page.locator('.key.active').count(),0);
+    await page.evaluate(()=>window.testMidi.onmidimessage({data:[176,64,127]}));
+    assert.equal(await page.locator('#sustain').getAttribute('aria-pressed'),'true');
+    await page.locator('#panic').click();assert.equal(await page.locator('#sustain').getAttribute('aria-pressed'),'false');
+    await page.locator('#soundfont').setInputFiles(process.env.AUREA_TEST_SOUNDFONT||'assets/GeneralUser-GS.sf2');
+    await page.locator('#piano-name').fill('Piano de prueba guardado');await page.locator('#piano-name-save').click();
+    await page.locator('#status').filter({hasText:'Banco cargado'}).waitFor({timeout:60000});
+    assert((await page.locator('#preset option').count())>0);
+    const importedPeaks=[];
+    for(const velocity of [70,100]){
+      await page.locator('#velocity').evaluate((el,value)=>{el.value=String(value);el.dispatchEvent(new Event('input',{bubbles:true}));},velocity);
+      await page.evaluate(()=>window.testMidi.onmidimessage({data:[144,60,95]}));
+      await page.waitForTimeout(150);
+      const peak=await page.evaluate(()=>{const values=new Float32Array(window.testAnalyser.fftSize);window.testAnalyser.getFloatTimeDomainData(values);return Math.max(...values.map(Math.abs));});
+      assert(peak>0.0001,`Imported bank silent at velocity ${velocity}: ${peak}`);importedPeaks.push({velocity,peak});
+      await page.evaluate(()=>window.testMidi.onmidimessage({data:[128,60,0]}));await page.locator('#panic').click();await page.waitForTimeout(800);
+    }
+    await page.locator('#velocity').evaluate(el=>{el.value='85';el.dispatchEvent(new Event('input',{bubbles:true}));});
+    await page.locator('#demo').click();await page.waitForTimeout(200);await page.locator('#panic').click();await page.waitForTimeout(400);assert.equal(await page.locator('.key.active').count(),0);
+    await page.locator('[data-piano="steinway"]').click();
+    await page.waitForFunction(()=>document.querySelector('#instrument-name').textContent==='Steinway Model D');
+    assert.match(await page.locator('#availability').textContent(),/Incluido/);
+    await page.locator('[data-piano="kawai"]').click();
+    await page.locator('#load-piano').click();
+    await page.locator('#status').filter({hasText:'Piano listo'}).waitFor({timeout:60000});
+    await page.locator('#volume').focus();await page.keyboard.press('Home');await page.keyboard.press('ArrowRight');
+    assert.equal(await page.locator('#volume').inputValue(),'1');
+    await page.locator('#volume').evaluate(el=>{el.value='70';el.dispatchEvent(new Event('input',{bubbles:true}));});
+    await page.selectOption('#room','dry');assert.equal(await page.locator('#fx-reverb').isChecked(),false);
+    await page.selectOption('#room','studio');assert.equal(await page.locator('#fx-reverb').isChecked(),true);
+    await page.locator('#fx-chorus').check();await page.locator('#fx-chorus').uncheck();
+    await page.selectOption('#room','concert');
+    await page.locator('[data-tab="instrumento"]').click();
+    await page.locator('#toast').waitFor({state:'hidden'});
+    await page.evaluate(()=>window.scrollTo(0,0));
+    await page.screenshot({path:'test-results/app.png',fullPage:true});
+    for(const size of [{width:1536,height:1000},{width:1000,height:740}]){
+      await page.setViewportSize(size);
+      const geometry=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,lastKey:document.querySelector('[data-note="108"]').getBoundingClientRect().right,footer:document.querySelector('.statusbar').getBoundingClientRect().bottom}));
+      assert(geometry.scroll<=geometry.width,JSON.stringify(geometry));assert(geometry.lastKey<=geometry.width,JSON.stringify(geometry));assert(geometry.footer<=size.height,JSON.stringify(geometry));
+      await page.screenshot({path:`test-results/app-${size.width}.png`,fullPage:true});
+    }
+    assert.equal(errors.length,0,errors.join('\n'));
+    const messages=await page.evaluate(()=>window.testOutput);
+    assert(messages.some(m=>m[0]===144&&m[1]===60&&m[2]===85));
+    console.log(JSON.stringify({audioPeak:amplitude,importedPeaks,notesAndPedal:'PASS',importSoundFont:'PASS',routing:'PASS',rendererErrors:errors},null,2));
+  }finally{await app.close();}
+})().catch(error=>{console.error(error);process.exitCode=1;});
