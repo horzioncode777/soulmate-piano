@@ -1,0 +1,17 @@
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';
+import {BasicSoundBank,BasicPreset,BasicInstrument,BasicSample,SampleTypes,GeneratorTypes as G,SoundBankLoader,Modulator,ModulatorSource} from 'spessasynth_core';
+const source=path.resolve(process.argv[2]),destination=path.resolve(process.argv[3]);const regions=JSON.parse(fs.readFileSync(path.join(source,'regions.json')));
+const bank=new BasicSoundBank();Object.assign(bank.soundBankInfo,{name:'B290 Lite - Piano Pro',engineer:'Dore Mark / The Experience Pianos',comment:'Private compatibility adaptation of Austrian Concert B290 Lite v1.0. Pedal-up/down samples and 6 Lite layers. Vorbis compressed. Release damper samples included. CC20 controls the half-pedal release envelope; the app maps curve 11 from CC64.',version:{major:3,minor:0}});
+// The original SFZ uses amp_veltrack=0: select the recorded layer without extra velocity attenuation.
+for(const m of bank.defaultModulators)if(!m.primarySource.isCC&&m.primarySource.index===2&&[G.initialAttenuation,G.initialFilterFc].includes(m.destination))m.transformAmount=0;
+for(const program of [0,1,2]){
+  const pedal=program===1;
+  const instrument=new BasicInstrument();instrument.name=program===2?'B290 Release Dampers':pedal?'B290 Pedal Down':'B290 Pedal Up';bank.addInstruments(instrument);const preset=new BasicPreset(bank);preset.name=instrument.name;preset.program=program;preset.createZone(instrument);bank.addPresets(preset);
+  for(const [index,r] of regions.entries()){
+    if(program===2?r.trigger!=='release':r.trigger==='release'||r.pedal!==pedal)continue;
+    const samples=r.channels.map((file,channel)=>{const sample=new BasicSample(`B${index}${channel}`,r.rate,r.root,0,SampleTypes.monoSample,0,r.frames);sample.setCompressedData(new Uint8Array(fs.readFileSync(path.join(source,file))));bank.addSamples(sample);const zone=instrument.createZone(sample);zone.keyRange={min:r.lo,max:r.hi};zone.velRange={min:r.vLo,max:r.vHi};zone.setGenerator(G.overridingRootKey,r.root);zone.setGenerator(G.sampleModes,0);if(program!==2)zone.addModulators(new Modulator(new ModulatorSource(20,0,true),new ModulatorSource(),G.releaseVolEnv,4800));zone.setGenerator(G.initialAttenuation,Math.max(0,Math.round(-r.volume*10)));zone.setGenerator(G.pan,channel===0?-500:500);zone.setGenerator(G.attackVolEnv,Math.round(1200*Math.log2(r.attack)));zone.setGenerator(G.decayVolEnv,Math.round(1200*Math.log2(r.decay)));zone.setGenerator(G.sustainVolEnv,Math.round(-200*Math.log10(r.sustain/100)));zone.setGenerator(G.releaseVolEnv,Math.round(1200*Math.log2(r.release)));return sample;});samples[0].setLinkedSample(samples[1],SampleTypes.leftSample);
+  }
+}
+const output=bank.writeSF2({software:'Piano Pro B290 Lite adapter'});fs.mkdirSync(path.dirname(destination),{recursive:true});fs.writeFileSync(destination,Buffer.from(output));const parsed=SoundBankLoader.fromArrayBuffer(output);
+for(let program=0;program<2;program++)for(let note=21;note<=108;note++)for(const velocity of [1,41,42,47,48,52,53,57,58,63,64,85,127]){const zones=parsed.instruments[program].zones.filter(z=>note>=z.keyRange.min&&note<=z.keyRange.max&&velocity>=z.velRange.min&&velocity<=z.velRange.max);assert.equal(zones.length,2,`${program}/${note}/${velocity}`);}
+console.log(JSON.stringify({file:destination,bytes:output.byteLength,regions:regions.length,programs:3,stereoSamples:parsed.samples.length,coverageChecks:2*88*13},null,2));
