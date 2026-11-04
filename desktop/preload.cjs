@@ -1,0 +1,19 @@
+const {contextBridge,ipcRenderer}=require('electron');
+contextBridge.exposeInMainWorld('pianoRecording',{
+  start:rate=>ipcRenderer.invoke('piano-recording:start',rate),
+  append:(id,data)=>ipcRenderer.invoke('piano-recording:append',id,data),
+  finish:id=>ipcRenderer.invoke('piano-recording:finish',id),
+  save:id=>ipcRenderer.invoke('piano-recording:save',id),
+  discard:id=>ipcRenderer.invoke('piano-recording:discard',id)
+});
+contextBridge.exposeInMainWorld('pianoSettings',{
+  load:()=>ipcRenderer.invoke('piano-settings:load'),
+  save:value=>ipcRenderer.invoke('piano-settings:save',value)
+});
+contextBridge.exposeInMainWorld('pianoLibrary',{
+  list:()=>ipcRenderer.invoke('piano-library:list'),
+  save:entry=>ipcRenderer.invoke('piano-library:save',entry),
+  read:id=>ipcRenderer.invoke('piano-library:read',id),
+  rename:(id,name)=>ipcRenderer.invoke('piano-library:rename',id,name),
+  remove:id=>ipcRenderer.invoke('piano-library:remove',id)
+});
