@@ -1,0 +1,95 @@
+{
+  "name": "soulmate",
+  "version": "0.6.1",
+  "private": true,
+  "description": "Soulmate · Piano MIDI con cuatro bancos y grabación WAV",
+  "main": "desktop/main.cjs",
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.js",
+    "pack": "npm run build:audio && electron-builder --win nsis",
+    "test:library": "node tests/library-desktop.cjs",
+    "build:audio": "node scripts/build-worklet.mjs",
+    "test:recording": "node tests/recording-desktop.cjs",
+    "pack:dir": "npm run build:audio && electron-builder --win --dir",
+    "setup:piano": "node scripts/setup-piano.mjs",
+    "check": "node scripts/check-project.mjs",
+    "test:collection": "node tests/verify-banks.mjs"
+  },
+  "dependencies": {
+    "spessasynth_lib": "4.3.14"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "0.25.12",
+    "playwright": "^1.58.0"
+  },
+  "build": {
+    "appId": "local.aurea.piano",
+    "productName": "Soulmate",
+    "files": [
+      "desktop/**",
+      "src/**",
+      "assets/*.png",
+      "assets/*.ico",
+      "assets/*.svg",
+      "assets/*.js",
+      "assets/*LICENSE.txt",
+      "assets/banks/Kawai-CC0.txt",
+      "assets/banks/UprightPianoKW.sf2",
+      "node_modules/spessasynth*/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/soulmate-icon.ico"
+    },
+    "directories": {
+      "output": "release"
+    },
+    "compression": "normal",
+    "artifactName": "Soulmate-Setup-${version}.${ext}",
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Soulmate",
+      "uninstallDisplayName": "Soulmate",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "installerLanguages": [
+        "es_ES"
+      ],
+      "displayLanguageSelector": false,
+      "language": "3082",
+      "installerIcon": "assets/soulmate-icon.ico",
+      "uninstallerIcon": "assets/soulmate-icon.ico"
+    },
+    "beforePack": "scripts/before-pack.cjs"
+  },
+  "author": "Juan Esteban Torres Delgado",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/horzioncode777/soulmate-piano.git"
+  },
+  "homepage": "https://github.com/horzioncode777/soulmate-piano#readme",
+  "bugs": {
+    "url": "https://github.com/horzioncode777/soulmate-piano/issues"
+  },
+  "engines": {
+    "node": ">=22 <23"
+  }
+}
