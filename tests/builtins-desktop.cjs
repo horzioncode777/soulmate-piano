@@ -7,7 +7,7 @@ const {_electron:electron}=require('playwright');const assert=require('node:asse
     const create=AudioContext.prototype.createAnalyser;AudioContext.prototype.createAnalyser=function(){const analyser=create.call(this);window.bankAnalyser=analyser;return analyser;};
     const input={id:'test',name:'Test MIDI',state:'connected'};window.bankMidi=input;Object.defineProperty(navigator,'requestMIDIAccess',{value:async()=>({inputs:new Map([['test',input]]),outputs:new Map()})});
   });await page.reload();await page.locator('#library-count[data-ready="true"]').waitFor();return page;}
-  async function select(page,id){await page.locator(`[data-piano="${id}"]`).click();await page.locator('#load-piano:not([disabled])').waitFor({timeout:120000});assert.equal(await page.locator('.piano-card.selected').getAttribute('data-piano'),id);assert.match(await page.locator('#availability').textContent(),/Incluido/);}
+  async function select(page,id){await page.locator(`[data-piano="${id}"]`).click();await page.locator('#load-piano:not([disabled])').waitFor({timeout:120000});assert.equal(await page.locator('.piano-card.selected').getAttribute('data-piano'),id);assert.match(await page.locator('#availability').textContent(),/Kawai CC0|Banco opcional/);}
   try{
     let page=await open();
     assert.deepEqual(await page.locator('.piano-card').evaluateAll(cards=>cards.map(c=>c.dataset.piano)),['kawai','steinway','yamaha','bosendorfer']);assert.equal(await page.locator('.card-tools').count(),0);

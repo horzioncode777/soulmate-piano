@@ -61,7 +61,7 @@ const path=require('node:path');
     await page.locator('#demo').click();await page.waitForTimeout(200);await page.locator('#panic').click();await page.waitForTimeout(400);assert.equal(await page.locator('.key.active').count(),0);
     await page.locator('[data-piano="steinway"]').click();
     await page.waitForFunction(()=>document.querySelector('#instrument-name').textContent==='Steinway Model D');
-    assert.match(await page.locator('#availability').textContent(),/Incluido/);
+    assert.match(await page.locator('#availability').textContent(),/Kawai CC0|Banco opcional/);
     await page.locator('[data-piano="kawai"]').click();
     await page.locator('#load-piano').click();
     await page.locator('#status').filter({hasText:'Piano listo'}).waitFor({timeout:60000});
